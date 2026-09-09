@@ -1,26 +1,40 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import * as satellite from "satellite.js";
-
-const TLE_URL =
-  "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE";
 
 const TLE_CACHE_TIME = 2 * 60 * 60 * 1000;
 
-const FALLBACK_TLE = {
-  line1:
-    "1 25544U 98067A   26250.69200809  .00005759  00000+0  11253-3 0  9999",
-  line2:
-    "2 25544  51.6306 251.7517 0004980 116.5212 243.6288 15.49021131584546",
+const SATELLITES: Record<
+  string,
+  {
+    name: string;
+    line1: string;
+    line2: string;
+  }
+> = {
+  "25544": {
+    name: "ISS (ZARYA)",
+    line1:
+      "1 25544U 98067A   26250.69200809  .00005759  00000+0  11253-3 0  9999",
+    line2:
+      "2 25544  51.6306 251.7517 0004980 116.5212 243.6288 15.49021131584546",
+  },
 };
 
-let cachedTle = {
-  ...FALLBACK_TLE,
-  fetchedAt: 0,
-};
+const cachedTles: Record<
+  string,
+  {
+    line1: string;
+    line2: string;
+    fetchedAt: number;
+  }
+> = {};
 
-async function refreshTLE() {
+async function refreshTLE(noradId: string) {
+  const url =
+    `https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=TLE`;
+
   try {
-    const response = await fetch(TLE_URL, {
+    const response = await fetch(url, {
       cache: "no-store",
       signal: AbortSignal.timeout(3000),
     });
@@ -36,36 +50,60 @@ async function refreshTLE() {
       .split("\n")
       .map((line) => line.trim());
 
-    if (lines.length < 3) {
+    if (lines.length < 3 || !lines[1] || !lines[2]) {
       return;
     }
 
-    if (!lines[1] || !lines[2]) {
-      return;
-    }
-
-    cachedTle = {
+    cachedTles[noradId] = {
       line1: lines[1],
       line2: lines[2],
       fetchedAt: Date.now(),
     };
-  } catch {
-  }
+  } catch {}
 }
 
-async function getTLE() {
-  const now = Date.now();
+async function getTLE(noradId: string) {
+  const cached = cachedTles[noradId];
 
-  if (now - cachedTle.fetchedAt >= TLE_CACHE_TIME) {
-    refreshTLE();
+  if (
+    cached &&
+    Date.now() - cached.fetchedAt < TLE_CACHE_TIME
+  ) {
+    return cached;
   }
 
-  return cachedTle;
+  if (!cached && SATELLITES[noradId]) {
+    cachedTles[noradId] = {
+      line1: SATELLITES[noradId].line1,
+      line2: SATELLITES[noradId].line2,
+      fetchedAt: 0,
+    };
+  }
+
+  refreshTLE(noradId);
+
+  return cachedTles[noradId] ?? null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const tle = await getTLE();
+    const noradId =
+      request.nextUrl.searchParams.get("norad") ?? "25544";
+
+    const tle = await getTLE(noradId);
+
+    if (!tle) {
+      return NextResponse.json(
+        {
+          error: "Satellite not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const satelliteInfo = SATELLITES[noradId];
 
     const satrec = satellite.twoline2satrec(
       tle.line1,
@@ -104,8 +142,8 @@ export async function GET() {
     const altitude = geodetic.height;
 
     return NextResponse.json({
-      name: "ISS (ZARYA)",
-      noradId: 25544,
+      name: satelliteInfo?.name ?? `NORAD ${noradId}`,
+      noradId: Number(noradId),
       latitude,
       longitude,
       altitude,

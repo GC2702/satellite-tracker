@@ -22,6 +22,21 @@ type SatelliteData = {
 
 type Position = [number, number];
 
+const SATELLITES = [
+  {
+    noradId: 25544,
+    name: "ISS (ZARYA)",
+  },
+  {
+    noradId: 20580,
+    name: "Hubble Space Telescope",
+  },
+  {
+    noradId: 43013,
+    name: "NOAA 20",
+  },
+];
+
 function FollowSatellite({
   position,
   following,
@@ -44,6 +59,9 @@ function FollowSatellite({
 }
 
 export default function SatelliteMap() {
+  const [selectedSatellite, setSelectedSatellite] =
+    useState(25544);
+
   const [satellite, setSatellite] =
     useState<SatelliteData | null>(null);
 
@@ -56,8 +74,12 @@ export default function SatelliteMap() {
   const [following, setFollowing] =
     useState(false);
 
-  const [previousPosition, setPreviousPosition] =
-    useState<Position | null>(null);
+  useEffect(() => {
+    setTrail([]);
+    setPosition(null);
+    setSatellite(null);
+    setFollowing(false);
+  }, [selectedSatellite]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +87,7 @@ export default function SatelliteMap() {
     const fetchSatellite = async () => {
       try {
         const response = await fetch(
-          "/api/satellite",
+          `/api/satellite?norad=${selectedSatellite}`,
           {
             cache: "no-store",
           }
@@ -94,11 +116,6 @@ export default function SatelliteMap() {
         ];
 
         setSatellite(data);
-
-        setPreviousPosition(
-          position ?? newPosition
-        );
-
         setPosition(newPosition);
 
         setTrail((previousTrail) => {
@@ -130,7 +147,7 @@ export default function SatelliteMap() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedSatellite]);
 
   return (
     <div className="relative h-full w-full">
@@ -190,80 +207,107 @@ export default function SatelliteMap() {
         )}
       </MapContainer>
 
-      {satellite && (
-        <div className="absolute left-4 top-4 z-[1000] w-72 rounded-xl border border-white/20 bg-black/80 p-5 text-white shadow-2xl backdrop-blur-md">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20 text-xl">
-              🛰️
-            </div>
+      <div className="absolute left-4 top-4 z-[1000] w-72 rounded-xl border border-white/20 bg-black/80 p-5 text-white shadow-2xl backdrop-blur-md">
+        <div className="mb-4">
+          <p className="mb-2 text-xs uppercase tracking-wider text-gray-400">
+            Satellite
+          </p>
 
-            <div>
-              <h2 className="font-semibold">
-                {satellite.name}
-              </h2>
-
-              <p className="text-xs text-gray-400">
-                NORAD {satellite.noradId}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-400">
-                Latitude
-              </span>
-
-              <span>
-                {satellite.latitude.toFixed(2)}°
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-gray-400">
-                Longitude
-              </span>
-
-              <span>
-                {satellite.longitude.toFixed(2)}°
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-gray-400">
-                Altitude
-              </span>
-
-              <span>
-                {satellite.altitude.toFixed(0)} km
-              </span>
-            </div>
-
-            <div className="border-t border-white/10 pt-3">
-              <p className="text-xs text-gray-500">
-                Last updated
-              </p>
-
-              <p className="mt-1 text-xs">
-                {new Date(
-                  satellite.timestamp
-                ).toLocaleTimeString()}
-              </p>
-            </div>
-
-            <button
-              onClick={() =>
-                setFollowing((value) => !value)
-              }
-              className="mt-2 w-full rounded-lg bg-red-500 px-4 py-2 font-medium text-white transition hover:bg-red-600"
-            >
-              {following
-                ? "Stop Following"
-                : "Follow ISS"}
-            </button>
-          </div>
+          <select
+            value={selectedSatellite}
+            onChange={(event) =>
+              setSelectedSatellite(
+                Number(event.target.value)
+              )
+            }
+            className="w-full rounded-lg border border-white/20 bg-gray-900 px-3 py-2 text-sm text-white outline-none"
+          >
+            {SATELLITES.map((item) => (
+              <option
+                key={item.noradId}
+                value={item.noradId}
+              >
+                {item.name}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+
+        {satellite && (
+          <>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20 text-xl">
+                🛰️
+              </div>
+
+              <div>
+                <h2 className="font-semibold">
+                  {satellite.name}
+                </h2>
+
+                <p className="text-xs text-gray-400">
+                  NORAD {satellite.noradId}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">
+                  Latitude
+                </span>
+
+                <span>
+                  {satellite.latitude.toFixed(2)}°
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-400">
+                  Longitude
+                </span>
+
+                <span>
+                  {satellite.longitude.toFixed(2)}°
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-400">
+                  Altitude
+                </span>
+
+                <span>
+                  {satellite.altitude.toFixed(0)} km
+                </span>
+              </div>
+
+              <div className="border-t border-white/10 pt-3">
+                <p className="text-xs text-gray-500">
+                  Last updated
+                </p>
+
+                <p className="mt-1 text-xs">
+                  {new Date(
+                    satellite.timestamp
+                  ).toLocaleTimeString()}
+                </p>
+              </div>
+
+              <button
+                onClick={() =>
+                  setFollowing((value) => !value)
+                }
+                className="mt-2 w-full rounded-lg bg-red-500 px-4 py-2 font-medium text-white transition hover:bg-red-600"
+              >
+                {following
+                  ? "Stop Following"
+                  : "Follow Satellite"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
