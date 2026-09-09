@@ -7,6 +7,7 @@ import {
   Popup,
   Polyline,
   TileLayer,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -21,6 +22,27 @@ type SatelliteData = {
 
 type Position = [number, number];
 
+function FollowSatellite({
+  position,
+  following,
+}: {
+  position: Position | null;
+  following: boolean;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (following && position) {
+      map.panTo(position, {
+        animate: true,
+        duration: 0.5,
+      });
+    }
+  }, [map, position, following]);
+
+  return null;
+}
+
 export default function SatelliteMap() {
   const [satellite, setSatellite] =
     useState<SatelliteData | null>(null);
@@ -30,6 +52,12 @@ export default function SatelliteMap() {
 
   const [trail, setTrail] =
     useState<Position[]>([]);
+
+  const [following, setFollowing] =
+    useState(false);
+
+  const [previousPosition, setPreviousPosition] =
+    useState<Position | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,28 +81,34 @@ export default function SatelliteMap() {
           await response.json();
 
         if (
-          !cancelled &&
-          data.latitude !== undefined &&
-          data.longitude !== undefined
+          cancelled ||
+          data.latitude === undefined ||
+          data.longitude === undefined
         ) {
-          const newPosition: Position = [
-            data.latitude,
-            data.longitude,
+          return;
+        }
+
+        const newPosition: Position = [
+          data.latitude,
+          data.longitude,
+        ];
+
+        setSatellite(data);
+
+        setPreviousPosition(
+          position ?? newPosition
+        );
+
+        setPosition(newPosition);
+
+        setTrail((previousTrail) => {
+          const updatedTrail = [
+            ...previousTrail,
+            newPosition,
           ];
 
-          setSatellite(data);
-          setPosition(newPosition);
-
-          setTrail((previousTrail) => {
-            const updatedTrail = [
-              ...previousTrail,
-              newPosition,
-            ];
-
-            // Keep the latest 120 positions
-            return updatedTrail.slice(-120);
-          });
-        }
+          return updatedTrail.slice(-120);
+        });
       } catch (error) {
         if (!cancelled) {
           console.warn(
@@ -100,7 +134,6 @@ export default function SatelliteMap() {
 
   return (
     <div className="relative h-full w-full">
-      {/* MAP */}
       <MapContainer
         center={[20, 0]}
         zoom={2}
@@ -113,7 +146,11 @@ export default function SatelliteMap() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* ISS ORBITAL TRAIL */}
+        <FollowSatellite
+          position={position}
+          following={following}
+        />
+
         {trail.length > 1 && (
           <Polyline
             positions={trail}
@@ -125,7 +162,6 @@ export default function SatelliteMap() {
           />
         )}
 
-        {/* ISS MARKER */}
         {satellite && position && (
           <CircleMarker
             center={position}
@@ -154,10 +190,8 @@ export default function SatelliteMap() {
         )}
       </MapContainer>
 
-      {/* SATELLITE INFORMATION PANEL */}
       {satellite && (
         <div className="absolute left-4 top-4 z-[1000] w-72 rounded-xl border border-white/20 bg-black/80 p-5 text-white shadow-2xl backdrop-blur-md">
-          {/* Header */}
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20 text-xl">
               🛰️
@@ -174,7 +208,6 @@ export default function SatelliteMap() {
             </div>
           </div>
 
-          {/* Data */}
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-400">
@@ -217,6 +250,17 @@ export default function SatelliteMap() {
                 ).toLocaleTimeString()}
               </p>
             </div>
+
+            <button
+              onClick={() =>
+                setFollowing((value) => !value)
+              }
+              className="mt-2 w-full rounded-lg bg-red-500 px-4 py-2 font-medium text-white transition hover:bg-red-600"
+            >
+              {following
+                ? "Stop Following"
+                : "Follow ISS"}
+            </button>
           </div>
         </div>
       )}
