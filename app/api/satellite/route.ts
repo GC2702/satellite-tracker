@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
       satellite.propagate(satrec, now);
 
     if (
+      !positionAndVelocity ||
       !positionAndVelocity.position ||
       typeof positionAndVelocity.position === "boolean"
     ) {
